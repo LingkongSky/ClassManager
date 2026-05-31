@@ -1,11 +1,11 @@
-import { handleError, handleResponse, serializeData } from './utils.ts';
+import { requestWithHandler, serializeData } from './utils.ts';
 import { generalApi } from './common.ts';
 
 
 export const memberApiService = {
     // 获取学生列表
     getStudentList: (class_id: string, query_count: number, query_word: string) => {
-        return new Promise<any>((resolve, reject) => {
+        return requestWithHandler<any>(
             generalApi.get('user/getList', {
                 params: {
                     class_id,
@@ -13,39 +13,31 @@ export const memberApiService = {
                     query_word
                 }
             })
-                .then(response => handleResponse(response, resolve, reject, [0, 1]))
-                .catch(error => handleError(error, reject));
-        });
+            , [0, 1]
+        );
     },
 
     // 获取班级列表
     getClassList: () => {
-        return new Promise<any>((resolve, reject) => {
-            generalApi.get('class/getList')
-                .then(response => handleResponse(response, resolve, reject))
-                .catch(error => handleError(error, reject));
-        });
+        return requestWithHandler<any>(generalApi.get('class/getList'));
     },
 
     getClassIdByName: (class_name: string) => {
-        return new Promise<any>((resolve, reject) => {
+        return requestWithHandler<any>(
             generalApi.post('class/getId', serializeData({
                 class_name
             }))
-                .then(response => handleResponse(response, resolve, reject))
-                .catch(error => handleError(error, reject));
-        });
+        );
     },
 
     // 批量添加学生（Excel导入）
     batchAddStudents: (data: any[]) => {
-        return new Promise<any>((resolve, reject) => {
+        return requestWithHandler<any>(
             generalApi.post('user/add', serializeData({
                 data: JSON.stringify(data)
             }))
-                .then(response => handleResponse(response, resolve, reject, [0, 2]))
-                .catch(error => handleError(error, reject));
-        });
+            , [0, 2]
+        );
     },
 
     // 添加单个学生
@@ -55,62 +47,52 @@ export const memberApiService = {
         password: string;
         class_id: string;
     }>) => {
-        return new Promise<any>((resolve, reject) => {
+        return requestWithHandler<any>(
             generalApi.post('user/add', serializeData({
                 data: JSON.stringify(data)
             }))
-                .then(response => handleResponse(response, resolve, reject))
-                .catch(error => handleError(error, reject));
-        });
+        );
     },
 
     // 删除学生（单个或批量）
     deleteStudent: (student_list: string[]) => {
-        return new Promise<any>((resolve, reject) => {
+        return requestWithHandler<any>(
             generalApi.post('user/delete', serializeData({
                 student_list: JSON.stringify(student_list)
             }))
-                .then(response => handleResponse(response, resolve, reject))
-                .catch(error => handleError(error, reject));
-        });
+        );
     },
 
     // 编辑学生信息
     editStudent: (account: string, name: string, class_id: string) => {
-        return new Promise<any>((resolve, reject) => {
+        return requestWithHandler<any>(
             generalApi.post('user/edit', serializeData({
                 account,
                 name,
                 class_id
             }))
-                .then(response => handleResponse(response, resolve, reject))
-                .catch(error => handleError(error, reject));
-        });
+        );
     },
 
     // 修改密码
     changePassword: (account: string, password: string) => {
-        return new Promise<any>((resolve, reject) => {
+        return requestWithHandler<any>(
             generalApi.post('user/editPassword', serializeData({
                 account,
                 password
             }))
-                .then(response => handleResponse(response, resolve, reject))
-                .catch(error => handleError(error, reject));
-        });
+        );
     },
 
     // 获取用户数量
     getStudentCount: (class_id: string, query_word: string) => {
-        return new Promise<any>((resolve, reject) => {
+        return requestWithHandler<any>(
             generalApi.get('user/getCount', {
                 params: {
                     class_id,
                     query_word
                 }
             })
-                .then(response => handleResponse(response, resolve, reject))
-                .catch(error => handleError(error, reject));
-        });
+        );
     }
 };

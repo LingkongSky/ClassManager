@@ -7,14 +7,19 @@ export const handleResponse = <T>(
   if (response.data instanceof Blob) {
     const reader = new FileReader();
     reader.onload = () => {
-      const text = reader.result as string;
-      const data = JSON.parse(text);
-      if (successCodes.includes(data?.code)) {
-        resolve(data);
-      } else {
+      try {
+        const text = reader.result as string;
+        const data = JSON.parse(text);
+        if (successCodes.includes(data?.code)) {
+          resolve(data);
+          return;
+        }
         reject(new Error(data?.message || '请求失败'));
+      } catch {
+        reject(new Error('响应解析失败'));
       }
     };
+    reader.onerror = () => reject(new Error('响应解析失败'));
     reader.readAsText(response.data);
   } else {
     if (successCodes.includes(response.data?.code)) {
@@ -77,6 +82,16 @@ export const handleError = (error: any, reject: (reason?: any) => void) => {
     reject(new Error(`请求配置错误: ${error.message}`));
   }
 };
+
+export const requestWithHandler = <T>(
+  request: Promise<any>,
+  successCodes: number[] = [0]
+) =>
+  new Promise<T>((resolve, reject) => {
+    request
+      .then(response => handleResponse<T>(response, resolve, reject, successCodes))
+      .catch(error => handleError(error, reject));
+  });
 
 export const serializeData = (data: Record<string, any>) => {
   const params = new URLSearchParams();
