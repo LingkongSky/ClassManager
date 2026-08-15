@@ -4,7 +4,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 // import checker from 'vite-plugin-checker'
 import legacy from '@vitejs/plugin-legacy'
-const proxy_url: string = "http://127.0.0.1:8000/";
+const proxy_url: string = "http://127.0.0.1:8000";
 
 export default defineConfig({
   build: {
@@ -47,6 +47,7 @@ export default defineConfig({
     // visualizer({ open: false })
   ],
   server: {
+    host: '127.0.0.1',
     proxy: {
       '/api': {
         target: proxy_url, 

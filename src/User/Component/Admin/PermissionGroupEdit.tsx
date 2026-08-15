@@ -565,7 +565,8 @@ const PermissionGroupEdit: React.FC = () => {
                     </Form.Item>
                     <Form.Item label="管理班级" name="class_list" rules={[{ required: true, message: '请选择管理班级' }]}>
                         <Select
-                            showSearch={{optionFilterProp: ['label']}}
+                            showSearch
+                            optionFilterProp="label"
                             mode="tags"
                             options={classList!}
                         />
@@ -620,7 +621,8 @@ const PermissionGroupEdit: React.FC = () => {
                     </Form.Item>
                     <Form.Item label="管理班级" name="class_list" rules={[{ required: true, message: '请输入被管理的班级' }]}>
                         <Select
-                            showSearch={{optionFilterProp: ['label']}}
+                            showSearch
+                            optionFilterProp="label"
                             mode="tags"
                             options={classList!}
 

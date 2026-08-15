@@ -49,6 +49,24 @@ const UserCenter: React.FC = () => {
             try {
                 const data = await userCenterApiService.getUserInfo();
                 const info = data.data;
+                const classNames: string[] = info.class_names ?? (info.class_name ? [info.class_name] : []);
+                const primaryClassName: string | undefined = info.primary_class_name ?? classNames[0];
+                const orderedClassNames = primaryClassName
+                    ? [primaryClassName, ...classNames.filter((name: string) => name !== primaryClassName)]
+                    : classNames;
+                const classDisplay = (
+                    <>
+                        {orderedClassNames.map((name: string, index: number) => (
+                            <span
+                                key={`${info.account}-${name}-${index}`}
+                                style={name === primaryClassName ? { textDecoration: 'underline' } : undefined}
+                            >
+                                {index > 0 ? ' / ' : ''}
+                                {name}
+                            </span>
+                        ))}
+                    </>
+                );
 
                 setAccount(info.account);
 
@@ -71,7 +89,7 @@ const UserCenter: React.FC = () => {
                             key: '3',
                             label: '班级',
                             span: 3,
-                            children: info.class_name,
+                            children: classDisplay,
                         },
                         {
                             key: '4',

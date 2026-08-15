@@ -67,4 +67,36 @@ export const classApiService = {
         );
     },
 
+    // 超级管理员：获取全量班级（用于快速建班）
+    getAllClasses: () => {
+        return requestWithHandler<any>(
+            generalApi.post('class/list', serializeData({
+                query_count: 0,
+                query_word: ''
+            }))
+        );
+    },
+
+    // 超级管理员：按来源班级获取学生
+    getStudentsByClasses: (sourceClassIds: string[], queryWord: string) => {
+        return requestWithHandler<any>(
+            generalApi.get('class/getStudentsByClasses', {
+                params: {
+                    source_class_ids: JSON.stringify(sourceClassIds),
+                    query_word: queryWord
+                }
+            })
+        );
+    },
+
+    // 超级管理员：追加副班级
+    appendStudents: (targetClassId: string, studentAccounts: string[]) => {
+        return requestWithHandler<any>(
+            generalApi.post('class/appendStudents', serializeData({
+                target_class_id: targetClassId,
+                student_accounts: JSON.stringify(studentAccounts)
+            }))
+        );
+    },
+
 };

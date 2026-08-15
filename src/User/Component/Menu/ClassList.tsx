@@ -2,11 +2,15 @@ import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
 import {
     Button,
+    Divider,
     Form,
     GetProp,
     Input,
     Modal,
+    Tag,
+    Select,
     Space,
+    Table,
     TableProps,
     Upload,
     UploadProps,
@@ -54,6 +58,19 @@ const props: UploadProps = {
 type DataType = {
     class_name: string;
 };
+
+type ClassOption = {
+    value: string;
+    label: string;
+};
+
+type QuickStudentItem = {
+    key: string;
+    account: string;
+    name: string;
+    class_names?: string[];
+    primary_class_name?: string;
+};
 type Sorts = SorterResult<any>
 let queryWord: string = "";
 
@@ -68,7 +85,10 @@ const ClassList: React.FC = () => {
     const [open1, setOpen1] = useState(false);
     const [open2, setOpen2] = useState(false);
     const [open3, setOpen3] = useState(false);
+    const [openQuickBuild, setOpenQuickBuild] = useState(false);
     const [confirmLoading1, setConfirmLoading1] = useState(false);
+    const [quickLoading, setQuickLoading] = useState(false);
+    const [quickStudentsLoading, setQuickStudentsLoading] = useState(false);
 
     const [editClassId, setEditClassId] = useState("");
     const [deleteClassId, setDeleteClassId] = useState("");
@@ -81,9 +101,13 @@ const ClassList: React.FC = () => {
 
     const [uploadKey, setUploadKey] = useState(0);
     const [xlxsAnalysisData, setXlxsAnalysisData] = useState<null | DataType[]>(null);
+    const [allClasses, setAllClasses] = useState<ClassOption[]>([]);
+    const [quickStudents, setQuickStudents] = useState<QuickStudentItem[]>([]);
+    const [quickSelectedAccounts, setQuickSelectedAccounts] = useState<React.Key[]>([]);
 
     const [form1] = Form.useForm();
     const [form3] = Form.useForm();
+    const [quickForm] = Form.useForm();
 
     const [tableParams, setTableParams] = useState<TableParams>({
         pagination: {
@@ -478,6 +502,90 @@ const ClassList: React.FC = () => {
         }
     }
 
+    const renderClassNames = (record: QuickStudentItem) => {
+        const classNames = record.class_names ?? [];
+        const primaryClassName = record.primary_class_name ?? classNames[0];
+        const ordered = primaryClassName
+            ? [primaryClassName, ...classNames.filter((name) => name !== primaryClassName)]
+            : classNames;
+        return ordered.map((name, idx) => (
+            <span key={`${record.account}-${name}-${idx}`} style={name === primaryClassName ? { textDecoration: 'underline' } : undefined}>
+                {idx > 0 ? ' / ' : ''}
+                {name}
+            </span>
+        ));
+    };
+
+    async function openQuickBuildModal() {
+        try {
+            const data = await classApiService.getAllClasses();
+            const options: ClassOption[] = (data.data ?? []).map((item: any) => ({
+                value: item.class_id,
+                label: item.class_name
+            }));
+            setAllClasses(options);
+            setQuickStudents([]);
+            setQuickSelectedAccounts([]);
+            quickForm.resetFields();
+            setOpenQuickBuild(true);
+        } catch (error: any) {
+            messageService.error(error?.message || '获取班级列表失败');
+        }
+    }
+
+    async function loadQuickStudents() {
+        const sourceClassIds = quickForm.getFieldValue('source_class_ids') ?? [];
+        const queryWordQuick = quickForm.getFieldValue('query_word') ?? '';
+        if (!Array.isArray(sourceClassIds) || sourceClassIds.length === 0) {
+            setQuickStudents([]);
+            setQuickSelectedAccounts([]);
+            return;
+        }
+
+        setQuickStudentsLoading(true);
+        try {
+            const data = await classApiService.getStudentsByClasses(sourceClassIds, queryWordQuick);
+            const rows: QuickStudentItem[] = (data.data ?? []).map((item: any) => ({
+                key: item.account,
+                account: item.account,
+                name: item.name,
+                class_names: item.class_names,
+                primary_class_name: item.primary_class_name,
+            }));
+            setQuickStudents(rows);
+            setQuickSelectedAccounts([]);
+        } catch (error: any) {
+            messageService.error(error?.message || '加载学生失败');
+        } finally {
+            setQuickStudentsLoading(false);
+        }
+    }
+
+    async function quickBuildSubmit() {
+        const targetClassId = quickForm.getFieldValue('target_class_id');
+        if (!targetClassId) {
+            messageService.info('请选择目标班级');
+            return;
+        }
+        if (quickSelectedAccounts.length === 0) {
+            messageService.info('请至少选择一个学生');
+            return;
+        }
+
+        setQuickLoading(true);
+        try {
+            await classApiService.appendStudents(targetClassId, quickSelectedAccounts as string[]);
+            messageService.success('快速建班成功：已追加为副班级');
+            setOpenQuickBuild(false);
+            await getMaxClass();
+            await get_class_list(0);
+        } catch (error: any) {
+            messageService.error(error?.message || '快速建班失败');
+        } finally {
+            setQuickLoading(false);
+        }
+    }
+
 
     useEffect(() => {
         setTimeout(async() => {
@@ -551,6 +659,13 @@ const ClassList: React.FC = () => {
                             onClick={() => { setUploadKey(uploadKey + 1); setOpen2(true) }}
                         >
                             批量添加
+                        </Button>,
+                        <Button
+                            key="quickBuild"
+                            type="primary"
+                            onClick={openQuickBuildModal}
+                        >
+                            快速建班
                         </Button>,
                     ],
                 }}
@@ -636,6 +751,80 @@ const ClassList: React.FC = () => {
 
             <Modal title="删除选中的班级" open={showDeleteClassList} onOk={() => { class_list_delete_submit() }} onCancel={() => { setShowDeleteClassList(false) }} destroyOnHidden okType="danger" okText="确定">
                 <p>您确定要删除所有选中的班级吗？</p>
+            </Modal>
+
+            <Modal
+                title="快速建班（追加副班级）"
+                open={openQuickBuild}
+                onOk={quickBuildSubmit}
+                confirmLoading={quickLoading}
+                onCancel={() => { setOpenQuickBuild(false) }}
+                width={980}
+                okText="确认追加副班级"
+                cancelText="取消"
+            >
+                <Form
+                    form={quickForm}
+                    layout="vertical"
+                    onValuesChange={(changed) => {
+                        if (changed.source_class_ids) {
+                            loadQuickStudents();
+                        }
+                    }}
+                >
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                        <Form.Item label="来源班级（可多选）" name="source_class_ids" rules={[{ required: true, message: '请选择来源班级' }]}>
+                            <Select mode="multiple" options={allClasses} showSearch optionFilterProp="label" placeholder="选择要抽取学生的班级" />
+                        </Form.Item>
+                        <Form.Item label="目标班级（第三班级）" name="target_class_id" rules={[{ required: true, message: '请选择目标班级' }]}>
+                            <Select options={allClasses} showSearch optionFilterProp="label" placeholder="选择学生要加入的班级" />
+                        </Form.Item>
+                        <Form.Item label="学生筛选（姓名前缀）" name="query_word">
+                            <Input.Search allowClear placeholder="留空表示不过滤" onSearch={loadQuickStudents} enterButton="筛选" />
+                        </Form.Item>
+                    </div>
+                </Form>
+
+                <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Space wrap>
+                        <Tag color="blue">候选学生 {quickStudents.length} 人</Tag>
+                        <Tag color="green">已选 {quickSelectedAccounts.length} 人</Tag>
+                    </Space>
+                    <Space>
+                        <Button
+                            onClick={() => setQuickSelectedAccounts(quickStudents.map((item) => item.account))}
+                            disabled={quickStudents.length === 0}
+                        >
+                            全选筛选结果
+                        </Button>
+                        <Button onClick={() => setQuickSelectedAccounts([])}>
+                            清空选择
+                        </Button>
+                    </Space>
+                </div>
+
+                <Table<QuickStudentItem>
+                    rowKey="account"
+                    loading={quickStudentsLoading}
+                    dataSource={quickStudents}
+                    pagination={{ pageSize: 12, showSizeChanger: true }}
+                    rowSelection={{
+                        selectedRowKeys: quickSelectedAccounts,
+                        onChange: (keys) => setQuickSelectedAccounts(keys),
+                    }}
+                    columns={[
+                        { title: '姓名', dataIndex: 'name', key: 'name' },
+                        { title: '学号', dataIndex: 'account', key: 'account' },
+                        { title: '当前班级', key: 'class_names', render: (_, record) => renderClassNames(record) },
+                    ]}
+                    size="small"
+                    bordered
+                    scroll={{ y: 420 }}
+                />
+                <Divider style={{ margin: '12px 0' }} />
+                <div style={{ color: '#8c8c8c', fontSize: 12 }}>
+                    说明：该操作仅为学生追加“副班级”，不会修改学生主班级。
+                </div>
             </Modal>
 
 

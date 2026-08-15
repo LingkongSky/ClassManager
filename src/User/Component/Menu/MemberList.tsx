@@ -16,6 +16,11 @@ export type TableListItem = {
     name: string;
     studentID: string;
     class_name: string;
+    class_ids?: string[];
+    class_names?: string[];
+    primary_class_id?: string;
+    primary_class_name?: string;
+    can_edit?: boolean;
 };
 
 const { Dragger } = Upload;
@@ -71,6 +76,26 @@ const previewColumns = [
 let queryWord: string = "";
 
 const MemberList: React.FC = () => {
+    const renderClassNames = (record: TableListItem) => {
+        const classNames = record.class_names ?? (record.class_name ? [record.class_name] : []);
+        const primaryClassName = record.primary_class_name ?? classNames[0];
+        const orderedClassNames = primaryClassName
+            ? [primaryClassName, ...classNames.filter((name) => name !== primaryClassName)]
+            : classNames;
+        return (
+            <>
+                {orderedClassNames.map((name, index) => (
+                    <span
+                        key={`${record.studentID}-${name}-${index}`}
+                        style={name === primaryClassName ? { textDecoration: 'underline' } : undefined}
+                    >
+                        {index > 0 ? ' / ' : ''}
+                        {name}
+                    </span>
+                ))}
+            </>
+        );
+    };
 
     const [dataSource, setDataSource] = useState<TableListItem[]>([]);
 
@@ -96,6 +121,7 @@ const MemberList: React.FC = () => {
     const [deleteStudentName, setDeleteStudentName] = useState("");
     const [showDeleteStudent, setShowDeleteStudent] = useState(false);
     const [showDeleteStudentList, setShowDeleteStudentList] = useState(false);
+    const [selectedRowMap, setSelectedRowMap] = useState<Record<string, TableListItem>>({});
 
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
     // const [refreshKey, setRefreshKey] = useState(230);
@@ -144,17 +170,22 @@ const MemberList: React.FC = () => {
             title: '班级',
             key: 'class_name',
             dataIndex: 'class_name',
+            render: (_, record) => renderClassNames(record),
             hidden: isMobile
         },
         {
             title: '操作',
             key: 'option',
             valueType: 'option',
-            render: (_, entity) => [
-                <a style={{ whiteSpace: "nowrap" }} onClick={() => student_edit(entity.studentID, entity.name, entity.class_name)} key="editInfo">编辑信息</a>,
-                <a style={{ whiteSpace: "nowrap" }} onClick={() => student_password_edit(entity.studentID, entity.name)} key="editPasswd">修改密码</a>,
-                <a style={{ whiteSpace: "nowrap" }} onClick={() => student_delete(entity.studentID, entity.name)} key="deleteStu">删除</a>,
-            ],
+            render: (_, entity) => {
+                const canEdit = entity.can_edit !== false;
+                const disabledStyle = canEdit ? {} : { color: '#bfbfbf', cursor: 'not-allowed', pointerEvents: 'none' as const };
+                return [
+                    <a style={{ whiteSpace: "nowrap", ...disabledStyle }} onClick={() => student_edit(entity.studentID, entity.name, entity.class_ids, entity.primary_class_id)} key="editInfo">编辑信息</a>,
+                    <a style={{ whiteSpace: "nowrap", ...disabledStyle }} onClick={() => student_password_edit(entity.studentID, entity.name)} key="editPasswd">修改密码</a>,
+                    <a style={{ whiteSpace: "nowrap", ...disabledStyle }} onClick={() => student_delete(entity.studentID, entity.name)} key="deleteStu">删除</a>,
+                ];
+            },
         },
     ];
 
@@ -177,7 +208,8 @@ const MemberList: React.FC = () => {
     interface BatchAddPayloadItem {
         name: string,
         account: string,
-        class_id: string,
+        class_ids: string[],
+        primary_class_id: string,
         password: string
     };
 
@@ -312,7 +344,22 @@ const MemberList: React.FC = () => {
     // 提交学生批量删除
     async function student_list_delete_submit() {
         try {
-            await memberApiService.deleteStudent(selectedRowKeys as string[]);
+            const editableAccounts = (selectedRowKeys as string[]).filter((account) => {
+                const row = selectedRowMap[String(account)];
+                return row?.can_edit !== false;
+            });
+
+            if (editableAccounts.length === 0) {
+                messageService.info('选中的学生均无权限删除');
+                setShowDeleteStudentList(false);
+                return;
+            }
+
+            if (editableAccounts.length < selectedRowKeys.length) {
+                messageService.info('已自动跳过无权限删除的学生');
+            }
+
+            await memberApiService.deleteStudent(editableAccounts);
             messageService.info('删除成功!');
             setLoading(true);
             await getMaxStudent();
@@ -325,6 +372,7 @@ const MemberList: React.FC = () => {
 
         setShowDeleteStudentList(false);
         setSelectedRowKeys([]);
+        setSelectedRowMap({});
     }
 
     // 获取班级列表
@@ -363,7 +411,8 @@ const MemberList: React.FC = () => {
                 name: values.name,
                 account: values.account,
                 password: PasswordHash(values.password),
-                class_id: values.class_id
+                class_ids: values.class_ids,
+                primary_class_id: values.primary_class_id
             }];
 
             await memberApiService.addStudent(param);
@@ -393,7 +442,8 @@ const MemberList: React.FC = () => {
             await memberApiService.editStudent(
                 values.account,
                 values.name,
-                values.class_id
+                values.class_ids,
+                values.primary_class_id
             );
 
             messageService.info('学生信息修改成功!');
@@ -467,7 +517,8 @@ const MemberList: React.FC = () => {
                 return {
                     name: item.name,
                     account: item.account,
-                    class_id: classId,
+                    class_ids: [classId],
+                    primary_class_id: classId,
                     password: item.password
                 };
             });
@@ -492,16 +543,38 @@ const MemberList: React.FC = () => {
         setXlxsAnalysisData(null);
     }
 
+    // 班级选择联动主班级：
+    // 1. 仅一个班级时，主班级自动同步
+    // 2. 主班级不在已选班级时，自动回落到首个班级
+    const syncPrimaryClass = (form: any, classIds?: string[]) => {
+        if (!Array.isArray(classIds) || classIds.length === 0) return;
+        if (classIds.length === 1) {
+            form.setFieldValue('primary_class_id', classIds[0]);
+            return;
+        }
+        const currentPrimary = form.getFieldValue('primary_class_id');
+        if (!currentPrimary || !classIds.includes(currentPrimary)) {
+            form.setFieldValue('primary_class_id', classIds[0]);
+        }
+    };
+
+    const syncClassIdsForSingleMode = (form: any, primaryClassId?: string) => {
+        if (!primaryClassId) return;
+        const classIds = form.getFieldValue('class_ids');
+        if (!Array.isArray(classIds) || classIds.length <= 1) {
+            form.setFieldValue('class_ids', [primaryClassId]);
+        }
+    };
+
 
 
     // edit student
-    const student_edit = (studentID: any, name: any, class_name: any) => {
-        // 将学生信息填入表单
-        var this_class = classList!.find((item) => item.label === class_name);
+    const student_edit = (studentID: any, name: any, class_ids: string[] = [], primary_class_id?: string) => {
         form2.setFieldsValue({
             account: studentID,
             name: name,
-            class_id: this_class?.value,
+            class_ids,
+            primary_class_id: primary_class_id ?? class_ids[0],
         });
         setOpen3(true);
 
@@ -594,7 +667,12 @@ const MemberList: React.FC = () => {
                     key: item.account,
                     name: item.name,
                     studentID: item.account,
-                    class_name: item.class_name,
+                    class_name: item.primary_class_name,
+                    class_ids: item.class_ids,
+                    class_names: item.class_names,
+                    primary_class_id: item.primary_class_id,
+                    primary_class_name: item.primary_class_name,
+                    can_edit: item.can_edit,
                 }));
 
                 const dataLength = tableData.length;
@@ -643,14 +721,18 @@ const MemberList: React.FC = () => {
                         //selections: [Table.SELECTION_ALL],
                         onSelect: (record, selected) => {
                             let arr = []
+                            const map = { ...selectedRowMap };
                             if (selected) {
                                 arr = Array.from(new Set([...selectedRowKeys, record.key]))
+                                map[String(record.key)] = record;
                             } else {
                                 arr = selectedRowKeys.filter(item => {
                                     return item !== record.key
                                 })
+                                delete map[String(record.key)];
                             }
                             setSelectedRowKeys(arr)
+                            setSelectedRowMap(map)
                         },
                         onChange: (selectedRowKeys) => {
                             setSelectedRowKeys(selectedRowKeys)
@@ -731,7 +813,20 @@ const MemberList: React.FC = () => {
                 onCancel={() => { setOpen1(false) }}
             >
 
-                <Form {...formItemLayout} form={form1} onFinish={formSubmit1} style={{ maxWidth: 600 }}>
+                <Form
+                    {...formItemLayout}
+                    form={form1}
+                    onFinish={formSubmit1}
+                    onValuesChange={(changedValues) => {
+                        if (changedValues.class_ids) {
+                            syncPrimaryClass(form1, changedValues.class_ids);
+                        }
+                        if (changedValues.primary_class_id) {
+                            syncClassIdsForSingleMode(form1, changedValues.primary_class_id);
+                        }
+                    }}
+                    style={{ maxWidth: 600 }}
+                >
                     <Form.Item label="学号（账号）" name="account" rules={[{ required: true, message: '请输入学号（账号）' },
                     {
                         message: '请勿输入特殊字符',
@@ -765,8 +860,11 @@ const MemberList: React.FC = () => {
                         <Input.Password maxLength={40} iconRender={(visible) => (visible ? <EyeTwoTone /> : <EyeInvisibleOutlined />)} />
                     </Form.Item>
 
-                    <Form.Item label="班级" name="class_id" rules={[{ required: true, message: '请选择班级' }]}>
-                        <Select showSearch={{optionFilterProp: ['label']}} options={classList!} />
+                    <Form.Item label="班级" name="class_ids" rules={[{ required: true, message: '请选择班级' }]}>
+                        <Select mode="multiple" showSearch optionFilterProp="label" options={classList!} />
+                    </Form.Item>
+                    <Form.Item label="主班级" name="primary_class_id" rules={[{ required: true, message: '请选择主班级' }]}>
+                        <Select showSearch optionFilterProp="label" options={classList!} />
                     </Form.Item>
                 </Form>
             </Modal>
@@ -808,15 +906,31 @@ const MemberList: React.FC = () => {
                 onCancel={() => { setOpen3(false) }}
             >
 
-                <Form {...formItemLayout} form={form2} onFinish={formSubmit2} style={{ maxWidth: 600 }} >
+                <Form
+                    {...formItemLayout}
+                    form={form2}
+                    onFinish={formSubmit2}
+                    onValuesChange={(changedValues) => {
+                        if (changedValues.class_ids) {
+                            syncPrimaryClass(form2, changedValues.class_ids);
+                        }
+                        if (changedValues.primary_class_id) {
+                            syncClassIdsForSingleMode(form2, changedValues.primary_class_id);
+                        }
+                    }}
+                    style={{ maxWidth: 600 }}
+                >
                     <Form.Item label="学号（账号）" name="account" rules={[{ required: true, message: '请输入学号（账号）' }]}>
                         <Input maxLength={20} disabled />
                     </Form.Item>
                     <Form.Item label="姓名" name="name" rules={[{ required: true, message: '请输入姓名' }]}>
                         <Input maxLength={10} />
                     </Form.Item>
-                    <Form.Item label="班级" name="class_id" rules={[{ required: true, message: '请选择班级' }]}>
-                        <Select options={classList!} />
+                    <Form.Item label="班级" name="class_ids" rules={[{ required: true, message: '请选择班级' }]}>
+                        <Select mode="multiple" showSearch optionFilterProp="label" options={classList!} />
+                    </Form.Item>
+                    <Form.Item label="主班级" name="primary_class_id" rules={[{ required: true, message: '请选择主班级' }]}>
+                        <Select showSearch optionFilterProp="label" options={classList!} />
                     </Form.Item>
                 </Form>
             </Modal>

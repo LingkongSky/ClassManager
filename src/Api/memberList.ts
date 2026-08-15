@@ -45,7 +45,8 @@ export const memberApiService = {
         name: string;
         account: string;
         password: string;
-        class_id: string;
+        class_ids: string[];
+        primary_class_id: string;
     }>) => {
         return requestWithHandler<any>(
             generalApi.post('user/add', serializeData({
@@ -64,12 +65,13 @@ export const memberApiService = {
     },
 
     // 编辑学生信息
-    editStudent: (account: string, name: string, class_id: string) => {
+    editStudent: (account: string, name: string, class_ids: string[], primary_class_id: string) => {
         return requestWithHandler<any>(
             generalApi.post('user/edit', serializeData({
                 account,
                 name,
-                class_id
+                class_ids: JSON.stringify(class_ids),
+                primary_class_id
             }))
         );
     },

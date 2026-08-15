@@ -19,6 +19,10 @@ type TableListItem = {
     account: string;
     level: string;
     class_id: string;
+    class_name?: string;
+    class_ids?: string[];
+    class_names?: string[];
+    primary_class_id?: string;
     permissions_group_id: string;
     permissions_group_name: string;
 };
@@ -108,16 +112,16 @@ const PermissionContent: React.FC = () => {
     });
 
     // 填充编辑信息
-    const admin_edit = (account: any, permissions_group_id: any, name: any, class_id: any) => {
+    const admin_edit = (account: any, permissions_group_id: any, name: any, class_ids: string[] = [], primary_class_id?: string) => {
 
         setEditAdminId(account);
         setOpen3(true);
 
-        if (class_id == "null") class_id = "";
         form3.setFieldsValue({
             account: account,
             name: name,
-            class_id: class_id,
+            class_ids: class_ids,
+            primary_class_id: primary_class_id ?? class_ids[0],
             permissions_group_id: permissions_group_id,
         });
 
@@ -168,7 +172,7 @@ const PermissionContent: React.FC = () => {
             key: 'option',
             valueType: 'option',
             render: (_, entity) => [
-                <a style={{ whiteSpace: "nowrap" }} onClick={() => admin_edit(entity.account, entity.permissions_group_id, entity.name, entity.class_id)} key="edit">编辑</a>,
+                <a style={{ whiteSpace: "nowrap" }} onClick={() => admin_edit(entity.account, entity.permissions_group_id, entity.name, entity.class_ids, entity.primary_class_id)} key="edit">编辑</a>,
                 <a style={{ whiteSpace: "nowrap" }} onClick={() => admin_password_edit(entity.account, entity.name)} key="editPasswd">修改密码</a>,
                 <a style={{ whiteSpace: "nowrap" }} onClick={() => admin_delete(entity.account, entity.name)} key="delete">删除</a>,
             ],
@@ -207,10 +211,14 @@ const PermissionContent: React.FC = () => {
     async function admin_edit_sumbit(values: any) {
         setConfirmLoading2(true);
 
-        const class_id: string = values.class_id || "";
-
         try {
-            await permissionEditApi.editAdmin(editAdminId, values.name, class_id, values.permissions_group_id);
+            await permissionEditApi.editAdmin(
+                editAdminId,
+                values.name,
+                values.class_ids ?? [],
+                values.primary_class_id ?? '',
+                values.permissions_group_id
+            );
             messageService.info('编辑成功!');
             setLoading(true);
             await get_admin_list(0);
@@ -289,13 +297,12 @@ const PermissionContent: React.FC = () => {
     // 提交学生添加
     async function formSubmit2(values: any) {
         setConfirmLoading2(true);
-
-        const class_id: string = values.class_id || "";
         const param = [{
             name: values.name,
             account: values.account,
             password: PasswordHash(values.password),
-            class_id: class_id,
+            class_ids: values.class_ids ?? [],
+            primary_class_id: values.primary_class_id ?? '',
             permissions_group_id: values.permissions_group_id
         }];
 
@@ -407,6 +414,26 @@ const PermissionContent: React.FC = () => {
         }
     }
 
+    const syncPrimaryClass = (form: any, classIds?: string[]) => {
+        if (!Array.isArray(classIds) || classIds.length === 0) return;
+        if (classIds.length === 1) {
+            form.setFieldValue('primary_class_id', classIds[0]);
+            return;
+        }
+        const currentPrimary = form.getFieldValue('primary_class_id');
+        if (!currentPrimary || !classIds.includes(currentPrimary)) {
+            form.setFieldValue('primary_class_id', classIds[0]);
+        }
+    };
+
+    const syncClassIdsForSingleMode = (form: any, primaryClassId?: string) => {
+        if (!primaryClassId) return;
+        const classIds = form.getFieldValue('class_ids');
+        if (!Array.isArray(classIds) || classIds.length <= 1) {
+            form.setFieldValue('class_ids', [primaryClassId]);
+        }
+    };
+
     // 提交表单解析数据
     async function addListSumbit() {
         if (!xlxsAnalysisData || xlxsAnalysisData.length < 1) {
@@ -452,6 +479,7 @@ const PermissionContent: React.FC = () => {
                 name: "",
                 level: "",
                 class_id: "",
+                class_ids: [],
                 permissions_group_id: "",
                 permissions_group_name: "",
             }));
@@ -480,6 +508,10 @@ const PermissionContent: React.FC = () => {
                 name: item.name,
                 level: item.level,
                 class_id: item.class_id,
+                class_name: item.class_name,
+                class_ids: item.class_ids,
+                class_names: item.class_names,
+                primary_class_id: item.primary_class_id,
                 permissions_group_id: item.permissions_group_id,
                 permissions_group_name: item.permissions_group_name
             }));
@@ -639,7 +671,7 @@ const PermissionContent: React.FC = () => {
                         <Input maxLength={20} />
                     </Form.Item>
                     <Form.Item label="权限组" name="permissions_group_id" rules={[{ required: true, message: '请选择权限组' }]}>
-                        <Select showSearch={{optionFilterProp: ['label']}} options={permissionGroupList!} />
+                        <Select showSearch optionFilterProp="label" options={permissionGroupList!} />
                     </Form.Item>
                 </Form>
             </Modal>
@@ -680,7 +712,20 @@ const PermissionContent: React.FC = () => {
                 confirmLoading={confirmLoading2}
             >
 
-                <Form {...formItemLayout} form={form2} onFinish={formSubmit2} style={{ maxWidth: 600 }}>
+                <Form
+                    {...formItemLayout}
+                    form={form2}
+                    onFinish={formSubmit2}
+                    onValuesChange={(changedValues) => {
+                        if (changedValues.class_ids) {
+                            syncPrimaryClass(form2, changedValues.class_ids);
+                        }
+                        if (changedValues.primary_class_id) {
+                            syncClassIdsForSingleMode(form2, changedValues.primary_class_id);
+                        }
+                    }}
+                    style={{ maxWidth: 600 }}
+                >
                     <Form.Item label="学号（账号）" name="account" rules={[{ required: true, message: '请输入学号（账号）' },
                     {
                         message: '请勿输入特殊字符',
@@ -714,11 +759,14 @@ const PermissionContent: React.FC = () => {
                         <Input.Password maxLength={40} iconRender={(visible) => (visible ? <EyeTwoTone /> : <EyeInvisibleOutlined />)} />
                     </Form.Item>
 
-                    <Form.Item label="班级" name="class_id">
-                        <Select options={classList!} showSearch={{optionFilterProp: ['label']}} allowClear />
+                    <Form.Item label="班级" name="class_ids">
+                        <Select mode="multiple" options={classList!} showSearch optionFilterProp="label" />
+                    </Form.Item>
+                    <Form.Item label="主班级" name="primary_class_id">
+                        <Select options={classList!} showSearch optionFilterProp="label" />
                     </Form.Item>
                     <Form.Item label="权限组" name="permissions_group_id" rules={[{ required: true, message: '请选择权限组' }]}>
-                        <Select showSearch={{optionFilterProp: ['label']}} options={permissionGroupList!} />
+                        <Select showSearch optionFilterProp="label" options={permissionGroupList!} />
                     </Form.Item>
                 </Form>
             </Modal>
@@ -730,7 +778,20 @@ const PermissionContent: React.FC = () => {
                 onCancel={() => { setOpen3(false) }}
             >
 
-                <Form {...formItemLayout} form={form3} onFinish={admin_edit_sumbit} style={{ maxWidth: 600 }} >
+                <Form
+                    {...formItemLayout}
+                    form={form3}
+                    onFinish={admin_edit_sumbit}
+                    onValuesChange={(changedValues) => {
+                        if (changedValues.class_ids) {
+                            syncPrimaryClass(form3, changedValues.class_ids);
+                        }
+                        if (changedValues.primary_class_id) {
+                            syncClassIdsForSingleMode(form3, changedValues.primary_class_id);
+                        }
+                    }}
+                    style={{ maxWidth: 600 }}
+                >
                     {<Form.Item label="账号" name="account" rules={[{ required: true }]} >
                         <Input disabled />
                     </Form.Item>}
@@ -739,12 +800,15 @@ const PermissionContent: React.FC = () => {
                         <Input maxLength={10} />
                     </Form.Item>
 
-                    <Form.Item label="班级" name="class_id">
-                        <Select showSearch={{optionFilterProp: ['label']}} options={classList!} allowClear />
+                    <Form.Item label="班级" name="class_ids">
+                        <Select mode="multiple" showSearch optionFilterProp="label" options={classList!} />
+                    </Form.Item>
+                    <Form.Item label="主班级" name="primary_class_id">
+                        <Select showSearch optionFilterProp="label" options={classList!} />
                     </Form.Item>
 
                     <Form.Item label="权限组" name="permissions_group_id" rules={[{ required: true, message: '请选择权限组' }]}>
-                        <Select showSearch={{optionFilterProp: ['label']}} options={permissionGroupList!} />
+                        <Select showSearch optionFilterProp="label" options={permissionGroupList!} />
                     </Form.Item>
                 </Form>
             </Modal>

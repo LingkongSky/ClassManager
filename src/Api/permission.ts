@@ -32,12 +32,13 @@ export const permissionEditApi = {
   },
 
   // 编辑管理员信息
-  editAdmin: (account: string, name: string, class_id: string, permissions_group_id: string) => {
+  editAdmin: (account: string, name: string, class_ids: string[], primary_class_id: string, permissions_group_id: string) => {
     return requestWithHandler<any>(
       generalApi.post('permissionEdit/editAdmin', serializeData({
         account,
         name,
-        class_id,
+        class_ids: JSON.stringify(class_ids),
+        primary_class_id,
         permissions_group_id
       }))
     );

@@ -50,6 +50,8 @@ type HomeworkTableListItem = {
     studentID: string;
     submit_date: string;
     class_name: string;
+    class_names?: string[];
+    primary_class_name?: string;
 };
 
 interface HomeWorks {
@@ -104,6 +106,27 @@ let queryWord: string = "";
 let queryWord2: string = "";
 
 const ActivityContent: React.FC = () => {
+    const renderClassNames = (record: HomeworkTableListItem) => {
+        const classNames = record.class_names ?? (record.class_name ? [record.class_name] : []);
+        const primaryClassName = record.primary_class_name ?? classNames[0];
+        const orderedClassNames = primaryClassName
+            ? [primaryClassName, ...classNames.filter((name) => name !== primaryClassName)]
+            : classNames;
+
+        return (
+            <>
+                {orderedClassNames.map((name, index) => (
+                    <span
+                        key={`${record.account}-${name}-${index}`}
+                        style={name === primaryClassName ? { textDecoration: 'underline' } : undefined}
+                    >
+                        {index > 0 ? ' / ' : ''}
+                        {name}
+                    </span>
+                ))}
+            </>
+        );
+    };
 
     const [dataSource, setDataSource] = useState<TableListItem[]>([]);
 
@@ -259,6 +282,7 @@ const ActivityContent: React.FC = () => {
             title: '班级',
             dataIndex: 'class_name',
             key: 'class_name',
+            render: (_, record) => renderClassNames(record),
             //sorter: (a, b) => a.class_name.localeCompare(b.class_name),
         },
         {
@@ -389,6 +413,8 @@ const ActivityContent: React.FC = () => {
                 name: item.name,
                 account: item.account,
                 class_name: item.class_name,
+                class_names: item.class_names,
+                primary_class_name: item.primary_class_name,
                 status: statusMap2[item.status],
                 submit_date: item.submit_date,
             }));
@@ -646,6 +672,8 @@ const ActivityContent: React.FC = () => {
                 name: item.name,
                 account: item.account,
                 class_name: item.class_name,
+                class_names: item.class_names,
+                primary_class_name: item.primary_class_name,
                 status: statusMap2[item.status],
                 submit_date: item.submit_date,
             }));
